@@ -1,3 +1,4 @@
 Flask #bult br frozen 
 yt-dlp
 youtube-search-python
+gunicorn
