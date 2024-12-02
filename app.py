@@ -59,12 +59,12 @@ def download_video():
         output_template = os.path.join(TEMP_DIR, f"{safe_title}.%(ext)s")
 
         ydl_opts = {
-            'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
-            'outtmpl': output_template,
-            'quiet': True,
-            'cookiefile': COOKIES_FILE,
-        }
-
+    'format': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+    'outtmpl': output_template,
+    'quiet': True,
+    'cookiefile': COOKIES_FILE,
+    'proxy': '',  # Leave empty or provide a valid proxy URL
+}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
             downloaded_file = ydl.prepare_filename(info)
@@ -110,6 +110,7 @@ def download_audio():
             'outtmpl': output_template,
             'quiet': True,
             'cookiefile': COOKIES_FILE,
+            'proxy': '',  # Leave empty or provide a valid proxy URL
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
