@@ -62,6 +62,7 @@ def download_video():
             'outtmpl': output_template,
             'quiet': True,
             'cookiefile': COOKIES_FILE,
+            'proxy': None,  # Disable proxy
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -109,6 +110,7 @@ def download_audio():
             'outtmpl': output_template,
             'quiet': True,
             'cookiefile': COOKIES_FILE,
+            'proxy': None,  # Disable proxy
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -152,4 +154,5 @@ def home():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
