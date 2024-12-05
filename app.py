@@ -63,6 +63,7 @@ def download_video():
             'outtmpl': output_template,
             'quiet': True,
             'cookiefile': COOKIES_FILE,  # Use the cookies file
+            'noproxy': True  # Disable proxy usage
         }
         # Download the video
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -84,6 +85,7 @@ def download_video():
                 os.remove(file_path)
             except Exception as cleanup_error:
                 print(f"Error deleting file {file_path}: {cleanup_error}")
+
 @app.route('/')
 def home():
     return """
