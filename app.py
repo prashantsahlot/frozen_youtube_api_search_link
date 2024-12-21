@@ -12,43 +12,50 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 # Path to your cookies file
 COOKIES_FILE = "cookies.txt"  # Replace with your actual cookies file path
 
-@app.route('/search', methods=['GET'])
-def search_video():
+async def search_youtube(query):
     """
-    Search for a YouTube video by title using yt-dlp.
+    Search YouTube for a query and return the first result.
+    """
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'quiet': True,
+        'default_search': 'ytsearch1',
+        'cookiefile': COOKIES_FILE,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        search_results = ydl.extract_info(query, download=False)
+        if not search_results or 'entries' not in search_results or not search_results['entries']:
+            raise ValueError("No videos found for the given query.")
+        return search_results['entries'][0]
+
+@app.route('/search', methods=['GET'])
+async def search_video():
+    """
+    Search for a YouTube video by title.
     """
     try:
         query = request.args.get('title')
         if not query:
             return jsonify({"error": "The 'title' parameter is required"}), 400
 
-        # yt-dlp options for searching
-        ydl_opts = {
-            'quiet': True,
-            'cookiefile': COOKIES_FILE,
-            'simulate': True,  # Do not download, just fetch metadata
-        }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            search_results = ydl.extract_info(f"ytsearch:{query}", download=False)
-
-        if not search_results or 'entries' not in search_results or not search_results['entries']:
-            return jsonify({"error": "No videos found for the given title"}), 404
-
-        video = search_results['entries'][0]
+        video = await search_youtube(query)
         return jsonify({
             "title": video["title"],
             "url": video["webpage_url"],
             "duration": video.get("duration"),
             "channel": video.get("uploader"),
         })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/download', methods=['GET'])
-def download_video():
+async def download_video():
     """
-    Download a YouTube video by URL or search for a video by title and download.
+    Download a YouTube video by URL or title.
     """
     try:
         video_url = request.args.get('url')
@@ -57,27 +64,18 @@ def download_video():
         if not video_url and not video_title:
             return jsonify({"error": "Either 'url' or 'title' parameter is required"}), 400
 
+        # Search by title if no URL is provided
         if video_title:
-            ydl_opts = {
-                'quiet': True,
-                'cookiefile': COOKIES_FILE,
-                'simulate': True,
-            }
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                search_results = ydl.extract_info(f"ytsearch:{video_title}", download=False)
-
-            if not search_results or 'entries' not in search_results or not search_results['entries']:
-                return jsonify({"error": "No videos found for the given title"}), 404
-
-            video_url = search_results['entries'][0]['webpage_url']
+            video = await search_youtube(video_title)
+            video_url = video['webpage_url']
 
         unique_id = str(uuid.uuid4())
         output_template = os.path.join(TEMP_DIR, f"{unique_id}.%(ext)s")
 
         ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',
+            'format': 'bestaudio/best',
             'outtmpl': output_template,
+            'noplaylist': True,
             'quiet': True,
             'cookiefile': COOKIES_FILE,
         }
@@ -91,9 +89,12 @@ def download_video():
             as_attachment=True,
             download_name=os.path.basename(downloaded_file)
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
+        # Cleanup temporary files
         for file in os.listdir(TEMP_DIR):
             file_path = os.path.join(TEMP_DIR, file)
             try:
@@ -121,4 +122,3 @@ def home():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
