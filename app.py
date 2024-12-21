@@ -26,7 +26,6 @@ def search_video():
         ydl_opts = {
             'quiet': True,
             'cookiefile': COOKIES_FILE,
-            'noproxy': True,
             'simulate': True,  # Do not download, just fetch metadata
         }
 
@@ -62,7 +61,6 @@ def download_video():
             ydl_opts = {
                 'quiet': True,
                 'cookiefile': COOKIES_FILE,
-                'noproxy': True,
                 'simulate': True,
             }
 
@@ -82,7 +80,6 @@ def download_video():
             'outtmpl': output_template,
             'quiet': True,
             'cookiefile': COOKIES_FILE,
-            'noproxy': True
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
