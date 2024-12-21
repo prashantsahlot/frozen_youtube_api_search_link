@@ -76,7 +76,7 @@ def download_video():
         output_template = os.path.join(TEMP_DIR, f"{unique_id}.%(ext)s")
 
         ydl_opts = {
-            'format': 'mp4',
+            'format': 'bestvideo+bestaudio/best',
             'outtmpl': output_template,
             'quiet': True,
             'cookiefile': COOKIES_FILE,
