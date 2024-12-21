@@ -12,10 +12,7 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 # Path to your cookies file
 COOKIES_FILE = "cookies.txt"  # Replace with your actual cookies file path
 
-async def search_youtube(query):
-    """
-    Search YouTube for a query and return the first result.
-    """
+def search_youtube_sync(query):
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
@@ -29,6 +26,7 @@ async def search_youtube(query):
         if not search_results or 'entries' not in search_results or not search_results['entries']:
             raise ValueError("No videos found for the given query.")
         return search_results['entries'][0]
+
 
 @app.route('/search', methods=['GET'])
 async def search_video():
@@ -53,10 +51,7 @@ async def search_video():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/download', methods=['GET'])
-async def download_video():
-    """
-    Download a YouTube video by URL or title.
-    """
+def download_video():
     try:
         video_url = request.args.get('url')
         video_title = request.args.get('title')
@@ -66,7 +61,7 @@ async def download_video():
 
         # Search by title if no URL is provided
         if video_title:
-            video = await search_youtube(video_title)
+            video = search_youtube_sync(video_title)  # Use a synchronous version
             video_url = video['webpage_url']
 
         unique_id = str(uuid.uuid4())
@@ -101,6 +96,7 @@ async def download_video():
                 os.remove(file_path)
             except Exception as cleanup_error:
                 print(f"Error deleting file {file_path}: {cleanup_error}")
+
 
 @app.route('/')
 def home():
