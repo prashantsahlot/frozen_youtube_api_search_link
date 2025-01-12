@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_file
 import yt_dlp
 import os
 import uuid
+import requests
 
 app = Flask(__name__)
 
@@ -9,49 +10,66 @@ app = Flask(__name__)
 TEMP_DIR = "/tmp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# Path to your cookies file
-COOKIES_FILE = "cookies.txt"  # Replace with your actual cookies file path
+# Path to your cookies file (if needed)
+COOKIES_FILE = "cookies.txt"  # Replace with your actual cookies file path if required
 
-def search_youtube_sync(query):
+# Search API URL
+SEARCH_API_URL = "https://small-bush-de65.tenopno.workers.dev/search?title="
+
+def download_audio(video_url):
+    """
+    Download audio from the given YouTube video URL.
+    """
+    unique_id = str(uuid.uuid4())
+    output_template = os.path.join(TEMP_DIR, f"{unique_id}.%(ext)s")
+
     ydl_opts = {
         'format': 'bestaudio/best',
+        'outtmpl': output_template,
         'noplaylist': True,
         'quiet': True,
-        'default_search': 'ytsearch1',
         'cookiefile': COOKIES_FILE,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        search_results = ydl.extract_info(query, download=False)
-        if not search_results or 'entries' not in search_results or not search_results['entries']:
-            raise ValueError("No videos found for the given query.")
-        return search_results['entries'][0]
+        info = ydl.extract_info(video_url, download=True)
+        downloaded_file = ydl.prepare_filename(info)
+        return downloaded_file
 
 
 @app.route('/search', methods=['GET'])
-async def search_video():
+def search_video():
     """
-    Search for a YouTube video by title.
+    Search for a YouTube video using the external API.
     """
     try:
         query = request.args.get('title')
         if not query:
             return jsonify({"error": "The 'title' parameter is required"}), 400
 
-        video = await search_youtube(query)
+        # Use the external search API
+        response = requests.get(SEARCH_API_URL + query)
+        if response.status_code != 200:
+            return jsonify({"error": "Failed to fetch search results"}), 500
+
+        search_result = response.json()
+        if not search_result or 'link' not in search_result:
+            return jsonify({"error": "No videos found for the given query"}), 404
+
         return jsonify({
-            "title": video["title"],
-            "url": video["webpage_url"],
-            "duration": video.get("duration"),
-            "channel": video.get("uploader"),
+            "title": search_result["title"],
+            "url": search_result["link"],
+            "duration": search_result.get("duration"),
         })
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @app.route('/download', methods=['GET'])
-def download_video():
+def download_audio_endpoint():
+    """
+    Download audio from a YouTube video URL or search for it by title and download.
+    """
     try:
         video_url = request.args.get('url')
         video_title = request.args.get('title')
@@ -61,31 +79,25 @@ def download_video():
 
         # Search by title if no URL is provided
         if video_title:
-            video = search_youtube_sync(video_title)  # Use a synchronous version
-            video_url = video['webpage_url']
+            response = requests.get(SEARCH_API_URL + video_title)
+            if response.status_code != 200:
+                return jsonify({"error": "Failed to fetch search results"}), 500
 
-        unique_id = str(uuid.uuid4())
-        output_template = os.path.join(TEMP_DIR, f"{unique_id}.%(ext)s")
+            search_result = response.json()
+            if not search_result or 'link' not in search_result:
+                return jsonify({"error": "No videos found for the given query"}), 404
 
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_template,
-            'noplaylist': True,
-            'quiet': True,
-            'cookiefile': COOKIES_FILE,
-        }
+            video_url = search_result['link']
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            downloaded_file = ydl.prepare_filename(info)
+        # Download audio
+        downloaded_file = download_audio(video_url)
 
+        # Serve the downloaded file
         return send_file(
             downloaded_file,
             as_attachment=True,
             download_name=os.path.basename(downloaded_file)
         )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -101,12 +113,12 @@ def download_video():
 @app.route('/')
 def home():
     return """
-    <h1>🎥 YouTube Video Downloader API</h1>
-    <p>Use this API to search and download YouTube videos.</p>
+    <h1>🎶 YouTube Audio Downloader API</h1>
+    <p>Use this API to search and download audio from YouTube videos.</p>
     <p><strong>Endpoints:</strong></p>
     <ul>
         <li><strong>/search</strong>: Search for a video by title. Query parameter: <code>?title=</code></li>
-        <li><strong>/download</strong>: Download a video by URL or search for a title and download. Query parameters: <code>?url=</code> or <code>?title=</code></li>
+        <li><strong>/download</strong>: Download audio by URL or search for a title and download. Query parameters: <code>?url=</code> or <code>?title=</code></li>
     </ul>
     <p>Examples:</p>
     <ul>
@@ -116,5 +128,7 @@ def home():
     </ul>
     """
 
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
