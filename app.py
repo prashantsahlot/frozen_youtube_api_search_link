@@ -23,19 +23,24 @@ def download_audio(video_url):
     unique_id = str(uuid.uuid4())
     output_template = os.path.join(TEMP_DIR, f"{unique_id}.%(ext)s")
 
+    # Updated yt-dlp options
     ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': output_template,
-        'noplaylist': True,
-        'quiet': True,
-        'cookiefile': COOKIES_FILE,
+        'format': 'bestaudio/best',  # Best audio quality
+        'outtmpl': output_template,  # Output template
+        'noplaylist': True,  # Do not download playlists
+        'quiet': True,  # Suppress unnecessary output
+        'cookiefile': COOKIES_FILE,  # Cookies file (if needed)
+        'socket_timeout': 60,  # Increased timeout (in seconds)
+        'max_memory': 450000,  # Limit memory usage to 450MB (in KB)
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(video_url, download=True)
-        downloaded_file = ydl.prepare_filename(info)
-        return downloaded_file
-
+        try:
+            info = ydl.extract_info(video_url, download=True)
+            downloaded_file = ydl.prepare_filename(info)
+            return downloaded_file
+        except Exception as e:
+            raise Exception(f"Error downloading video: {e}")
 
 @app.route('/search', methods=['GET'])
 def search_video():
@@ -131,4 +136,3 @@ def home():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
