@@ -25,7 +25,7 @@ def download_audio(video_url):
 
     # Updated yt-dlp options
     ydl_opts = {
-        'format': 'bestaudio/best',  # Best audio quality
+        'format': 'worstaudio/worst',  # Best audio quality
         'outtmpl': output_template,  # Output template
         'noplaylist': True,  # Do not download playlists
         'quiet': True,  # Suppress unnecessary output
