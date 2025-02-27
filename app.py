@@ -3,12 +3,22 @@ import yt_dlp
 import os
 import uuid
 import requests
+import hashlib
+import glob
+import shutil
 
 app = Flask(__name__)
 
-# Directory for storing temporary files
-TEMP_DIR = "/tmp"
-os.makedirs(TEMP_DIR, exist_ok=True)
+# Base temporary directory (using /tmp for this example)
+BASE_TEMP_DIR = "/tmp"
+
+# Directory for storing temporary download files (will be cleaned after each request)
+TEMP_DOWNLOAD_DIR = os.path.join(BASE_TEMP_DIR, "download")
+os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
+
+# Directory for storing cached audio files (persist between requests)
+CACHE_DIR = os.path.join(BASE_TEMP_DIR, "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Path to your cookies file (if needed)
 COOKIES_FILE = "cookies.txt"  # Replace with your actual cookies file path if required
@@ -16,29 +26,45 @@ COOKIES_FILE = "cookies.txt"  # Replace with your actual cookies file path if re
 # Search API URL
 SEARCH_API_URL = "https://small-bush-de65.tenopno.workers.dev/search?title="
 
+def get_cache_key(video_url):
+    """Generate a cache key from the video URL."""
+    return hashlib.md5(video_url.encode('utf-8')).hexdigest()
+
 def download_audio(video_url):
     """
-    Download audio from the given YouTube video URL.
+    Download audio from the given YouTube video URL with caching.
+    If the audio file was previously downloaded, return the cached file.
     """
-    unique_id = str(uuid.uuid4())
-    output_template = os.path.join(TEMP_DIR, f"{unique_id}.%(ext)s")
+    cache_key = get_cache_key(video_url)
+    # Look for any file in the cache directory with the cache key as prefix
+    cached_files = glob.glob(os.path.join(CACHE_DIR, f"{cache_key}.*"))
+    if cached_files:
+        return cached_files[0]
 
-    # Updated yt-dlp options
+    # If not cached, download the file to TEMP_DOWNLOAD_DIR
+    unique_id = str(uuid.uuid4())
+    output_template = os.path.join(TEMP_DOWNLOAD_DIR, f"{unique_id}.%(ext)s")
     ydl_opts = {
-        'format': 'worstaudio/worst',  # Best audio quality
-        'outtmpl': output_template,  # Output template
-        'noplaylist': True,  # Do not download playlists
-        'quiet': True,  # Suppress unnecessary output
-        'cookiefile': COOKIES_FILE,  # Cookies file (if needed)
-        'socket_timeout': 60,  # Increased timeout (in seconds)
-        'max_memory': 450000,  # Limit memory usage to 450MB (in KB)
+        'format': 'worstaudio/worst',  # Audio quality settings
+        'outtmpl': output_template,     # Output template path
+        'noplaylist': True,             # Only download single video
+        'quiet': True,                  # Suppress verbose output
+        'cookiefile': COOKIES_FILE,     # Cookies file (if needed)
+        'socket_timeout': 60,           # Increased timeout in seconds
+        'max_memory': 450000,           # Limit memory usage (in KB)
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(video_url, download=True)
             downloaded_file = ydl.prepare_filename(info)
-            return downloaded_file
+            # Determine the extension (default to m4a if not provided)
+            ext = info.get("ext", "m4a")
+            # Define the cached file path using the cache key and extension
+            cached_file_path = os.path.join(CACHE_DIR, f"{cache_key}.{ext}")
+            # Move the downloaded file to the cache directory
+            shutil.move(downloaded_file, cached_file_path)
+            return cached_file_path
         except Exception as e:
             raise Exception(f"Error downloading video: {e}")
 
@@ -52,7 +78,6 @@ def search_video():
         if not query:
             return jsonify({"error": "The 'title' parameter is required"}), 400
 
-        # Use the external search API
         response = requests.get(SEARCH_API_URL + query)
         if response.status_code != 200:
             return jsonify({"error": "Failed to fetch search results"}), 500
@@ -69,11 +94,11 @@ def search_video():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/download', methods=['GET'])
 def download_audio_endpoint():
     """
     Download audio from a YouTube video URL or search for it by title and download.
+    Utilizes caching so repeated downloads for the same video are avoided.
     """
     try:
         video_url = request.args.get('url')
@@ -82,8 +107,8 @@ def download_audio_endpoint():
         if not video_url and not video_title:
             return jsonify({"error": "Either 'url' or 'title' parameter is required"}), 400
 
-        # Search by title if no URL is provided
-        if video_title:
+        # If a title is provided and URL is not, perform a search
+        if video_title and not video_url:
             response = requests.get(SEARCH_API_URL + video_title)
             if response.status_code != 200:
                 return jsonify({"error": "Failed to fetch search results"}), 500
@@ -94,26 +119,24 @@ def download_audio_endpoint():
 
             video_url = search_result['link']
 
-        # Download audio
-        downloaded_file = download_audio(video_url)
+        # Download (or fetch from cache) the audio file
+        cached_file_path = download_audio(video_url)
 
-        # Serve the downloaded file
         return send_file(
-            downloaded_file,
+            cached_file_path,
             as_attachment=True,
-            download_name=os.path.basename(downloaded_file)
+            download_name=os.path.basename(cached_file_path)
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        # Cleanup temporary files
-        for file in os.listdir(TEMP_DIR):
-            file_path = os.path.join(TEMP_DIR, file)
+        # Clean up temporary download files; cached files remain intact
+        for file in os.listdir(TEMP_DOWNLOAD_DIR):
+            file_path = os.path.join(TEMP_DOWNLOAD_DIR, file)
             try:
                 os.remove(file_path)
             except Exception as cleanup_error:
                 print(f"Error deleting file {file_path}: {cleanup_error}")
-
 
 @app.route('/')
 def home():
@@ -133,6 +156,6 @@ def home():
     </ul>
     """
 
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
