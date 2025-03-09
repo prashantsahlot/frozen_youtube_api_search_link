@@ -23,8 +23,8 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # Path to your cookies file (if needed)
 COOKIES_FILE = "cookies.txt"  # Replace with your actual cookies file path if required
 
-# Search API URL
-SEARCH_API_URL = "https://small-bush-de65.tenopno.workers.dev/search?title="
+# Search API URL (used both for regular searches and Spotify link resolution)
+SEARCH_API_URL = "https://odd-block-a945.tenopno.workers.dev/search?title="
 
 def get_cache_key(video_url):
     """Generate a cache key from the video URL."""
@@ -68,6 +68,21 @@ def download_audio(video_url):
         except Exception as e:
             raise Exception(f"Error downloading video: {e}")
 
+def resolve_spotify_link(url):
+    """
+    If the URL is a Spotify link, use the search API to find the corresponding YouTube link.
+    Otherwise, return the URL unchanged.
+    """
+    if "spotify.com" in url:
+        response = requests.get(SEARCH_API_URL + url)
+        if response.status_code != 200:
+            raise Exception("Failed to fetch search results for the Spotify link")
+        search_result = response.json()
+        if not search_result or 'link' not in search_result:
+            raise Exception("No YouTube link found for the given Spotify link")
+        return search_result['link']
+    return url
+
 @app.route('/search', methods=['GET'])
 def search_video():
     """
@@ -99,6 +114,7 @@ def download_audio_endpoint():
     """
     Download audio from a YouTube video URL or search for it by title and download.
     Utilizes caching so repeated downloads for the same video are avoided.
+    Also supports Spotify links by resolving them via the search API.
     """
     try:
         video_url = request.args.get('url')
@@ -118,6 +134,10 @@ def download_audio_endpoint():
                 return jsonify({"error": "No videos found for the given query"}), 404
 
             video_url = search_result['link']
+
+        # If the provided URL is a Spotify link, resolve it to a YouTube link
+        if video_url and "spotify.com" in video_url:
+            video_url = resolve_spotify_link(video_url)
 
         # Download (or fetch from cache) the audio file
         cached_file_path = download_audio(video_url)
@@ -153,6 +173,7 @@ def home():
         <li>Search: <code>/search?title=Your%20Favorite%20Song</code></li>
         <li>Download by URL: <code>/download?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ</code></li>
         <li>Download by Title: <code>/download?title=Your%20Favorite%20Song</code></li>
+        <li>Download from Spotify: <code>/download?url=https://open.spotify.com/track/...</code></li>
     </ul>
     """
 
