@@ -6,6 +6,7 @@ import requests
 import hashlib
 import glob
 import shutil
+import concurrent.futures
 
 app = Flask(__name__)
 
@@ -137,6 +138,8 @@ def download_audio_endpoint():
 
 # --- New endpoints for /song command ---
 
+download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
 @app.route('/song/audio', methods=['GET'])
 def song_audio_download():
     """
@@ -171,10 +174,10 @@ def song_audio_download():
                 'noplaylist': True,
                 'quiet': True,
                 'cookiefile': COOKIES_FILE,
-                'socket_timeout': 120,
+                'socket_timeout': 60,
                 'max_memory': 450000,
                 'postprocessors': [
-                    {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '320'},
+                    {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '96'},
                     {'key': 'FFmpegMetadata'},
                     {'key': 'EmbedThumbnail'}
                 ],
@@ -184,8 +187,10 @@ def song_audio_download():
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
-                    info = ydl.extract_info(video_url, download=True)
-                    # The final file should be unique_id.mp3
+                    # Offload the blocking extraction/download to a separate thread.
+                    future = download_executor.submit(ydl.extract_info, video_url, download=True)
+                    # Adjust the timeout as needed.
+                    info = future.result(timeout=120)
                     final_file = os.path.join(TEMP_DOWNLOAD_DIR, f"{unique_id}.mp3")
                     if not os.path.exists(final_file):
                         raise Exception("Downloaded file not found")
