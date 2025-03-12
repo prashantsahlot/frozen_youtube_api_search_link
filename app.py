@@ -171,7 +171,7 @@ def song_audio_download():
                 'noplaylist': True,
                 'quiet': True,
                 'cookiefile': COOKIES_FILE,
-                'socket_timeout': 60,
+                'socket_timeout': 120,
                 'max_memory': 450000,
                 'postprocessors': [
                     {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '320'},
@@ -244,7 +244,7 @@ def song_video_download():
                 'noplaylist': True,
                 'quiet': True,
                 'cookiefile': COOKIES_FILE,
-                'socket_timeout': 60,
+                'socket_timeout': 120,
                 'max_filesize': 52428800,  # 50 MB in bytes
                 'max_memory': 450000,
             }
