@@ -124,7 +124,7 @@ def download_video(video_url):
     output_template = os.path.join(TEMP_DOWNLOAD_DIR, f"{unique_id}.%(ext)s")
     # yt-dlp options: download the best available video with height<=360 (with audio if available)
     ydl_opts = {
-        'format': 'best[height<=360]',
+        'format': 'best[height<=720]',
         'outtmpl': output_template,
         'noplaylist': True,
         'quiet': True,
