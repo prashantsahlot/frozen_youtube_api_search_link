@@ -109,6 +109,89 @@ def search_video():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def download_video(video_url):
+    """
+    Download video (with audio) from the given YouTube video URL in 360p or lower quality with caching.
+    If the video file was previously downloaded, return the cached file.
+    """
+    # Create a cache key that is unique for video downloads.
+    cache_key = hashlib.md5((video_url + "_video").encode('utf-8')).hexdigest()
+    cached_files = glob.glob(os.path.join(CACHE_DIR, f"{cache_key}.*"))
+    if cached_files:
+        return cached_files[0]
+
+    unique_id = str(uuid.uuid4())
+    output_template = os.path.join(TEMP_DOWNLOAD_DIR, f"{unique_id}.%(ext)s")
+    # yt-dlp options: download the best available video with height<=360 (with audio if available)
+    ydl_opts = {
+        'format': 'best[height<=360]',
+        'outtmpl': output_template,
+        'noplaylist': True,
+        'quiet': True,
+        'cookiefile': COOKIES_FILE,
+        'socket_timeout': 60,
+        'max_memory': 450000,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(video_url, download=True)
+            downloaded_file = ydl.prepare_filename(info)
+            # Use the extension provided in info or default to mp4
+            ext = info.get("ext", "mp4")
+            cached_file_path = os.path.join(CACHE_DIR, f"{cache_key}.{ext}")
+            shutil.move(downloaded_file, cached_file_path)
+            return cached_file_path
+        except Exception as e:
+            raise Exception(f"Error downloading video: {e}")
+
+@app.route('/vdown', methods=['GET'])
+def download_video_endpoint():
+    """
+    Download video from a YouTube video URL (or search by title) in 360p or lower quality.
+    Works similarly to the /download endpoint, but returns the video file.
+    """
+    try:
+        video_url = request.args.get('url')
+        video_title = request.args.get('title')
+
+        if not video_url and not video_title:
+            return jsonify({"error": "Either 'url' or 'title' parameter is required"}), 400
+
+        # If title provided and URL not, perform search
+        if video_title and not video_url:
+            response = requests.get(SEARCH_API_URL + video_title)
+            if response.status_code != 200:
+                return jsonify({"error": "Failed to fetch search results"}), 500
+            search_result = response.json()
+            if not search_result or 'link' not in search_result:
+                return jsonify({"error": "No videos found for the given query"}), 404
+            video_url = search_result['link']
+
+        # Resolve Spotify links if needed
+        if video_url and "spotify.com" in video_url:
+            video_url = resolve_spotify_link(video_url)
+
+        # Download (or get from cache) the video file
+        cached_file_path = download_video(video_url)
+
+        return send_file(
+            cached_file_path,
+            as_attachment=True,
+            download_name=os.path.basename(cached_file_path)
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        # Clean up temporary download files; cached files remain intact
+        for file in os.listdir(TEMP_DOWNLOAD_DIR):
+            file_path = os.path.join(TEMP_DOWNLOAD_DIR, file)
+            try:
+                os.remove(file_path)
+            except Exception as cleanup_error:
+                print(f"Error deleting file {file_path}: {cleanup_error}")
+
+
 @app.route('/download', methods=['GET'])
 def download_audio_endpoint():
     """
