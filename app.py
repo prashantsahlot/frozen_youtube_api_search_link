@@ -146,7 +146,7 @@ def download_video(video_url):
     unique_id = str(uuid.uuid4())
     output_template = os.path.join(TEMP_DOWNLOAD_DIR, f"{unique_id}.%(ext)s")
     ydl_opts = {
-        'format': 'bestvideo[height<=240]+worstaudio/worst',
+        'format': 'bestvideo[height<=144]+worstaudio/worst',
         'outtmpl': output_template,
         'noplaylist': True,
         'quiet': True,
