@@ -152,7 +152,7 @@ def download_video(video_url):
         'quiet': True,
         'cookiefile': COOKIES_FILE,
         'socket_timeout': 60,
-        'max_memory': 450000,
+        'max_memory': 300000,
         'merge_output_format': 'mp4',
     }
 
